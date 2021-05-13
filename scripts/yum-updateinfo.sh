@@ -13,12 +13,13 @@
 #       security info on CentOS won't work. Other repo's you added may include such
 #       data, EPEL does for example, but ofcourse only for packages provided by EPEL.
 #
-# Host in Zabbix should be configured with the "Template Module YUM updateinfo by 
+# Host in Zabbix should be configured with the "Template Module YUM updateinfo by
 # Zabbix trapper" template.
 # Schedule this script to run each hour or so using a Systemd timer or cron job.
 
 # Configuration
-ZBX_CONFIG=/etc/zabbix/zabbix_agentd.conf
+ZBX_CONFIG=/etc/zabbix/zabbix_agent2.conf
+ZBX_HOSTNAME="$(zabbix_agent2 -t agent.hostname | grep -oP '(?<=\[s\|).*(?=\])')"
 ZBX_SENDER_BIN=zabbix_sender
 
 ZBX_ITEM_PREFIX=yum.updateinfo
@@ -52,7 +53,7 @@ CVES=$(timeout -k 30 5m yum updateinfo list cves | grep "CVE-" | awk '{ print $1
 
 # Count total number of available updates
 echo "Retrieving list of all updates..."
-UPDATES=$(timeout -k 30 5m yum -q check-update | egrep '(.i386|.x86_64|.noarch|.src)' | awk '{ print $1 }' | sort -u) 
+UPDATES=$(timeout -k 30 5m yum -q check-update | egrep '(.i386|.x86_64|.noarch|.src)' | awk '{ print $1 }' | sort -u)
 if [[ $UPDATES ]]; then
     UPDATES_COUNT=$(echo "$UPDATES" | wc -l)
     UPDATES=$(echo "$UPDATES" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/, /g' )
@@ -61,7 +62,7 @@ else
     UPDATES_COUNT=0;
 fi
 
-# Add data to file and send it to Zabbix Server 
+# Add data to file and send it to Zabbix Server
 echo "Generating $ZBX_DATA..."
 [[ $CRITICAL ]] && echo "- $ZBX_ITEM_PREFIX.security.critical $CRITICAL" >> $ZBX_DATA || echo "- $ZBX_ITEM_PREFIX.security.critical 0" >> $ZBX_DATA
 [[ $IMPORTANT ]] && echo "- $ZBX_ITEM_PREFIX.security.important $IMPORTANT" >> $ZBX_DATA || echo "- $ZBX_ITEM_PREFIX.security.important 0" >> $ZBX_DATA
@@ -70,10 +71,10 @@ echo "Generating $ZBX_DATA..."
 [[ $LOW ]] && echo "- $ZBX_ITEM_PREFIX.security.low $LOW" >> $ZBX_DATA || echo "- $ZBX_ITEM_PREFIX.security.low 0" >> $ZBX_DATA
 [[ $ENHANCEMENT ]] && echo "- $ZBX_ITEM_PREFIX.enhancement $ENHANCEMENT" >> $ZBX_DATA || echo "- $ZBX_ITEM_PREFIX.enhancement 0" >> $ZBX_DATA
 [[ $CVES ]] && echo "- $ZBX_ITEM_PREFIX.security.cves $CVES" >> $ZBX_DATA || echo "- $ZBX_ITEM_PREFIX.security.cves none" >> $ZBX_DATA
-echo "- $ZBX_ITEM_PREFIX.updates $UPDATES" >> $ZBX_DATA 
-echo "- $ZBX_ITEM_PREFIX.updates.count $UPDATES_COUNT" >> $ZBX_DATA 
+echo "- $ZBX_ITEM_PREFIX.updates $UPDATES" >> $ZBX_DATA
+echo "- $ZBX_ITEM_PREFIX.updates.count $UPDATES_COUNT" >> $ZBX_DATA
 
 echo "Sending data to Zabbix:"
 cat $ZBX_DATA
 
-$ZBX_SENDER -c $ZBX_CONFIG -i $ZBX_DATA
+$ZBX_SENDER -c $ZBX_CONFIG -s $ZBX_HOSTNAME -i $ZBX_DATA
